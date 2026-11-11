@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { python } from "./tools.mjs";
 import { createRequire } from 'node:module';
 const require=createRequire(import.meta.url);
 const Blockly=require('blockly');
@@ -29,11 +30,11 @@ const chain=list=>list.reduceRight((next,b)=>next?{...b,next:{block:next}}:b,nul
 const ws=new Blockly.Workspace();
 Blockly.serialization.workspaces.load({blocks:{languageVersion:0,blocks:[chain([{type:'iq_when_started'},...statements])]}},ws);
 const py=pythonGenerator.workspaceToCode(ws),cpp=Blockly.Cpp.workspaceToCode(ws);
-const parsed=spawnSync('python3',['-I','-c','import ast,sys;ast.parse(sys.stdin.read())'],{input:py,encoding:'utf8'});
+const parsed=spawnSync(python,['-I','-c','import ast,sys;ast.parse(sys.stdin.read())'],{input:py,encoding:'utf8'});
 assert.equal(parsed.status,0,parsed.stderr);
 assert.ok(py.includes('lambda iqm_x:'));
 assert.ok(cpp.includes('[&](double iqm_x)'));
-const simulated=spawnSync('python3',['-I','-c',`
+const simulated=spawnSync(python,['-I','-c',`
 import sys,types
 vex=types.ModuleType('vex')
 class Screen:
@@ -107,7 +108,7 @@ for op in range(29):
     values.append(iqm_real(op,arg))
 print(json.dumps(values))
 `;
-const result=spawnSync('python3',['-I','-c',pyChecks],{encoding:'utf8'});
+const result=spawnSync(python,['-I','-c',pyChecks],{encoding:'utf8'});
 assert.equal(result.status,0,result.stderr);
 const pyValues=JSON.parse(result.stdout.trim());
 
@@ -118,6 +119,8 @@ try {
 #include <cstdlib>
 #include <cstdio>
 #include <cassert>
+// VEX's headers and libc++ also declare these globally; libstdc++ (GCC, MinGW) only has them in std.
+using std::isfinite; using std::isnan; using std::isinf;
 struct ScreenStub { template<typename... T> void print(const char*,T...){} void setOrigin(int,int){} void setClipRegion(int,int,int,int){} void drawLine(int,int,int,int){} void drawPixel(int,int){} void render(){} };
 struct BrainStub { ScreenStub Screen; } Brain;
 ${Object.values(cppRuntime).join('\n')}

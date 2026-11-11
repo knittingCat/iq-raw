@@ -23,6 +23,7 @@
     play:'m8 4 12 8-12 8Z', stop:'M5 5h14v14H5Z', build:'m14 4 6 6-10 10-6-6ZM4 4l4 4',
     chip:'M7 7h10v10H7ZM3 8h4m-4 8h4m10-8h4m-4 8h4M8 3v4m8-4v4M8 17v4m8-4v4',
     settings:'M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6m-6 0v6',
+    help:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9.6 9.2a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.2 1-1.2 1.8v.5M12 17h.01',
     code:'m8 6-6 6 6 6m8-12 6 6-6 6m-3-15-2 18', console:'m4 6 5 5-5 5m8 1h8',
     tree:'M4 3v18m0-13h7m-7 9h7M11 5h9v6h-9ZM11 14h9v6h-9Z',
     fullscreen:'M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6',
@@ -51,7 +52,7 @@
     const $=id=>document.getElementById(id);
     for(const [id,name,label] of [
       ['send','send','Download and run'],['sendOnly','download','Download'],['run','play','Run slot'],['stop','stop','Stop'],['build','build','Build only'],['vm','chip','Install Python VM'],
-      ['refresh','refresh','Check brain'],['open','open','Open code'],['save','save','Save code'],['programs','list','Programs on brain'],['probe','chip','Probe brain API'],['settingsLink','settings','Settings'],
+      ['refresh','refresh','Check brain'],['open','open','Open code'],['save','save','Save code'],['programs','list','Programs on brain'],['probe','chip','Probe brain API'],['helpLink','help','Help'],['settingsLink','settings','Settings'],
     ]) iconize($(id),name,label);
     for(const [id,name,label] of [['treeToggle','tree','Program tree'],['fullscreenToggle','fullscreen','Fullscreen focus mode'],['controlsToggle','controls','Program controls'],['codeToggle','code','Show or hide code'],['consoleToggle','console','Show or hide console'],['previewToggle','chip','Brain preview'],['consoleClear','clear','Clear console'],['consoleCopy','copy','Copy console']]) iconize($(id),name,label,true);
     const source=$('sourcePanel'),consolePanel=$('consolePanel');

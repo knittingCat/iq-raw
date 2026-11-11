@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "test": "node test/blocks.test.mjs && node test/catalog.test.mjs && node test/math.test.mjs && node test/vex.test.mjs && node test/editor.test.mjs && node test/console.test.mjs && node test/transfer.test.mjs && node test/simulator.test.mjs && node test/bluetooth.test.mjs && node test/tree.test.mjs && node test/python.test.mjs",
+    "test": "node test/blocks.test.mjs && node test/catalog.test.mjs && node test/math.test.mjs && node test/vex.test.mjs && node test/editor.test.mjs && node test/console.test.mjs && node test/transfer.test.mjs && node test/simulator.test.mjs && node test/bluetooth.test.mjs && node test/tree.test.mjs && node test/python.test.mjs && node test/zip.test.mjs && node test/build.test.mjs && node test/help.test.mjs && node test/preview.test.mjs",
     "setup-preview": "node preview/setup.mjs",
     "setup-web-compiler": "node scripts/pack-iq2-sdk.mjs",
     "test:web-compiler": "node test/browser-compiler.test.mjs"
@@ -19,5 +19,8 @@
     "microbit-clang-wasm": "^21.11.0-alpha.1",
     "pyodide": "^314.0.7",
     "serialport": "^13.0.0"
+  },
+  "devDependencies": {
+    "jsdom": "22.1.0"
   }
 }

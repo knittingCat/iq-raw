@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const { extractZip } = require('./zip');
 
 const PORT = Number(process.env.PORT) || 5174;
 const ROOT = __dirname;
@@ -17,15 +18,11 @@ const MAX_CODE = 200000;
 // its libusb, to our own folder. Looks in VS Code and the other editors that share its extension format.
 const EXE = process.platform === 'win32' ? 'vexcom.exe' : 'vexcom';
 const PLATFORM_DIR = process.platform === 'darwin' ? 'osx' : process.platform === 'win32' ? 'win32' : `linux-${{ x64: 'x64', arm64: 'arm64', arm: 'arm32' }[process.arch] || process.arch}`;
-const EXT_ROOTS = ['.vscode', '.vscode-insiders', '.vscode-oss', '.cursor', '.windsurf', '.vscode-server'].map((d) => path.join(os.homedir(), d, 'extensions'));
-// The extension downloads vexcom into its own storage folder (tools/vexcom/<version>/<platform>) the first time it runs;
+const { EXT_ROOTS, STORAGES, findSdk, findTemplate } = require('./vex-paths');
+// The extension downloads vexcom into its storage folder (tools/vexcom/<version>/<platform>) the first time it runs;
 // older versions bundled it inside the extension folder instead.
-const STORE_ROOTS = [
-  path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'vexrobotics.vexcode', 'tools', 'vexcom'),
-  path.join(os.homedir(), 'Library', 'Application Support', 'Code - Insiders', 'User', 'globalStorage', 'vexrobotics.vexcode', 'tools', 'vexcom'),
-  path.join(os.homedir(), '.config', 'Code', 'User', 'globalStorage', 'vexrobotics.vexcode', 'tools', 'vexcom'),
-  ...(process.env.APPDATA ? [path.join(process.env.APPDATA, 'Code', 'User', 'globalStorage', 'vexrobotics.vexcode', 'tools', 'vexcom')] : []),
-];
+const STORE_ROOTS = STORAGES.map((s) => path.join(s, 'tools', 'vexcom'));
+const PALETTE_KEYS = process.platform === 'darwin' ? 'Cmd+Shift+P' : 'Ctrl+Shift+P';
 let lastSearch = '';
 
 function installVexcom(src) {
@@ -56,18 +53,20 @@ function findVexcom() {
       return installVexcom(src);
     }
   }
-  lastSearch = `Looked in: ${STORE_ROOTS.filter((r) => r).join(', ')} and in resources/tools/vexcom/${PLATFORM_DIR} of ${EXT_ROOTS.join(', ')}. VEX-looking extension folders found: ${seen.length ? seen.join(', ') : 'none'}.`;
+  lastSearch = `Looked in: ${STORE_ROOTS.join(', ')} and in resources/tools/vexcom/${PLATFORM_DIR} of ${EXT_ROOTS.join(', ')}. VEX-looking extension folders found: ${seen.length ? seen.join(', ') : 'none'}.`;
   return null;
 }
 
-const notFound = () => `vexcom was not found. Install the VS Code extension "VEX" by VEX Robotics (id vexrobotics.vexcode). Then open VS Code once and create a new VEX project (Cmd+Shift+P, "New Project"), so the extension downloads its tools, and retry. Or set VEXCOM=/path/to/${EXE}.\n${lastSearch}`;
+const notFound = () => `vexcom was not found. Install the VS Code extension "VEX" by VEX Robotics (id vexrobotics.vexcode). Then open VS Code once and create a new VEX project (${PALETTE_KEYS}, "New Project"), so the extension downloads its tools, and retry. Or set VEXCOM=/path/to/${EXE}.\n${lastSearch}`;
 
 // ---- running tools, one command at a time (one USB device, and builds share the template) ----
 let queue = Promise.resolve();
 function run(bin, args, { timeoutMs = 30000, cwd, env, onOutput } = {}) {
   const job = queue.then(() => new Promise((resolve) => {
     if (!bin) return resolve({ code: -1, out: notFound() });
-    const p = spawn(bin, args, { cwd: cwd || path.dirname(bin), env: env || process.env });
+    // A .js tool (VEXCOM=/path/to/fake.js) runs under this Node, since Windows cannot start a script from its shebang line.
+    const [exe, argv] = /\.[cm]?js$/i.test(bin) ? [process.execPath, [bin, ...args]] : [bin, args];
+    const p = spawn(exe, argv, { cwd: cwd || path.dirname(bin), env: env || process.env, windowsHide: true });
     let out = '';
     const timer = setTimeout(() => { out += '\n[timed out]'; p.kill(); }, timeoutMs);
     p.stdout.on('data', (d) => {out += d;onOutput?.(d,'stdout');});
@@ -106,7 +105,14 @@ const vexcom = async (args, timeoutMs = 30000, onProgress) => {
 const brainConsole = require('./serial-console').createConsole({ SerialPort: require('serialport').SerialPort, query: () => vexcom(['--json'],20000) });
 
 async function portDiagnostics(){
-  if(process.platform!=='darwin')return '';
+  // Windows and Linux cannot cheaply name which app holds a port, but can say whether the brain's ports exist at all.
+  // VEX devices use USB vendor ID 2888.
+  if(process.platform!=='darwin'){
+    let ports=[];
+    try{ports=(await require('serialport').SerialPort.list()).filter(p=>String(p.vendorId||'').toLowerCase()==='2888').map(p=>p.path);}catch{return '';}
+    if(!ports.length)return '\nNo VEX USB ports are present. Reconnect the powered-on brain using a USB data cable.';
+    return '\nVEX USB ports present: '+ports.join(', ')+'. If VEXcode IQ or VS Code\'s VEX extension is connected to the brain, disconnect it there (or quit it), then retry. The transfer was not retried automatically.';
+  }
   const ports=fs.readdirSync('/dev').filter(name=>/^(?:tty|cu)\.usbmodem[\w.-]+$/.test(name)).slice(0,64).map(name=>'/dev/'+name);
   if(!ports.length)return '\nNo USB modem ports are present. Reconnect the powered-on brain using a USB data cable.';
   const result=await run('/usr/sbin/lsof',['-nP',...ports],{timeoutMs:5000});
@@ -131,39 +137,39 @@ async function versionDiagnostics(lang){
 }
 
 // ---- the C++ toolchain: VEX's SDK, clang and make, downloaded by the VEX VS Code extension ----
-const STORAGE = process.env.VEX_STORAGE || path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'vexrobotics.vexcode');
+// Toolchain folder names, per OS and CPU, as VEX's extension names them. ARM machines fall back to the x64 build, which
+// macOS (Rosetta) and Windows on ARM can run.
+const TOOLCHAINS = {
+  darwin: process.arch === 'arm64' ? ['toolchain_osxarm64', 'toolchain_osx64'] : ['toolchain_osx64'],
+  win32: process.arch === 'arm64' ? ['toolchain_winarm64', 'toolchain_win32'] : ['toolchain_win32'],
+  linux: process.arch === 'arm64' ? ['toolchain_linuxarm64'] : ['toolchain_linux64'],
+}[process.platform] || [];
+const DOT_EXE = process.platform === 'win32' ? '.exe' : '';
 function findCpp() {
-  const sdkRoot = path.join(STORAGE, 'sdk', 'cpp', 'IQ2');
-  const toolchainNames = process.arch === 'arm64' ? ['toolchain_osxarm64', 'toolchain_osx64'] : ['toolchain_osx64'];
-  const toolRoots = [path.join(STORAGE, 'tools', 'cpp'), path.join(os.homedir(), '.iq-raw', 'toolchains')];
-  const tools = toolchainNames.flatMap((name) => toolRoots.map((root) => path.join(root, name)))
+  const isTool = (file) => { try { fs.accessSync(file + DOT_EXE, fs.constants.X_OK); return true; } catch { return false; } };
+  const toolRoots = [...STORAGES.map((s) => path.join(s, 'tools', 'cpp')), path.join(os.homedir(), '.iq-raw', 'toolchains')];
+  const tools = TOOLCHAINS.flatMap((name) => toolRoots.map((root) => path.join(root, name)))
     .find((root) => ['clang/bin/clang', 'gcc/bin/arm-none-eabi-ld', 'gcc/bin/arm-none-eabi-objcopy', 'gcc/bin/arm-none-eabi-ar', 'gcc/bin/arm-none-eabi-size', 'tools/bin/make']
-      .every((file) => { try { fs.accessSync(path.join(root, file), fs.constants.X_OK); return true; } catch { return false; } }));
-  let sdks = [];
-  try { sdks = fs.readdirSync(sdkRoot).filter((d) => fs.existsSync(path.join(sdkRoot, d, 'vexiq2', 'libviq2rt.a'))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); } catch { /* none */ }
-  if (!sdks.length || !tools) return null;
-  const extRoot = path.join(os.homedir(), '.vscode', 'extensions');
-  let zip = null;
-  try {
-    for (const d of fs.readdirSync(extRoot)) {
-      const z = path.join(extRoot, d, 'resources', 'templates', 'projects', 'IQ2', 'cpp_iq2_vsc_empty.zip');
-      if (fs.existsSync(z)) { zip = z; break; }
-    }
-  } catch { /* no VS Code */ }
+      .every((file) => isTool(path.join(root, file))));
+  const sdk = findSdk();
+  if (!sdk || !tools) return null;
+  const zip = findTemplate();
   if (!zip) return null;
-  const pathDirs = ['clang/bin', 'gcc/bin', 'tools/bin'].map((d) => path.join(tools, d));
-  return { sdk: path.join(sdkRoot, sdks[sdks.length - 1]), zip, path: pathDirs.join(':') + ':' + process.env.PATH };
+  // Same search order as VEX's extension: the SDK, then gcc, clang, make's own folder, then the user's PATH.
+  const pathDirs = [sdk, ...['gcc/bin', 'clang/bin', 'tools/bin'].map((d) => path.join(tools, d))];
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toUpperCase() !== 'PATH')); // Windows spells it Path
+  env.PATH = [...pathDirs, process.env.PATH || process.env.Path || ''].join(path.delimiter);
+  return { sdk, zip, env, make: path.join(tools, 'tools', 'bin', 'make' + DOT_EXE) };
 }
 
 // Compile main.cpp into a .bin using the stock IQ2 project template and its makefile. Returns { ok, out, dir, bin }; the caller removes dir.
 async function buildCpp(code) {
   const cpp = findCpp();
-  if (!cpp) return { ok: false, out: 'The VEX IQ2 C++ tools were not found or their installation is incomplete. In VS Code, create an IQ (2nd gen) C++ project, then run VEX’s "Download Toolchain" command from the Command Palette and wait for it to finish. A ZIP file alone is not an installed compiler. Apple Silicon and Intel Mac toolchains are supported.' };
+  if (!cpp) return { ok: false, out: `The VEX IQ2 C++ tools were not found or their installation is incomplete. In VS Code, create an IQ (2nd gen) C++ project, then run VEX’s "Download Toolchain" command from the Command Palette (${PALETTE_KEYS}) and wait for it to finish. A ZIP file alone is not an installed compiler. Looked for ${TOOLCHAINS.join(' or ') || 'a toolchain for this OS'} in ${STORAGES[0]} and ~/.iq-raw/toolchains.` };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'iq-raw-cpp-'));
-  const unzip = await run('/usr/bin/unzip', ['-qo', cpp.zip, '-d', dir], { cwd: dir });
-  if (unzip.code !== 0) return { ok: false, out: unzip.out, dir };
+  try { extractZip(cpp.zip, dir); } catch (e) { return { ok: false, out: `Could not unpack VEX's project template: ${e.message}`, dir }; }
   fs.writeFileSync(path.join(dir, 'src', 'main.cpp'), code);
-  const r = await run('make', [`T=${cpp.sdk}`, 'P=iqraw', 'PRINTF_FLOAT=1'], { cwd: dir, env: { ...process.env, PATH: cpp.path }, timeoutMs: 120000 });
+  const r = await run(cpp.make, [`T=${cpp.sdk}`, 'P=iqraw', 'PRINTF_FLOAT=1'], { cwd: dir, env: cpp.env, timeoutMs: 120000 });
   const bin = path.join(dir, 'build', 'iqraw.bin');
   return { ok: r.code === 0 && fs.existsSync(bin), out: r.out, dir, bin };
 }
@@ -232,7 +238,7 @@ brain.screen.print("probe done")
 `;
 
 // ---- HTTP ----
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.mjs': 'text/javascript; charset=utf-8', '.wasm':'application/wasm', '.json':'application/json', '.py':'text/plain; charset=utf-8' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.mjs': 'text/javascript; charset=utf-8', '.wasm':'application/wasm', '.json':'application/json', '.py':'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8' };
 
 // Cross-origin isolation lets the Python preview worker sleep and read the brain buttons through shared memory.
 // Everything the page loads is same-origin, so nothing breaks.
@@ -352,6 +358,8 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // The help page renders the same guide that GitHub shows; only this one file outside public/ is served.
+  if (url.pathname === '/docs/TROUBLESHOOTING.md') return sendFile(res, path.join(ROOT, 'TROUBLESHOOTING.md'));
   if(url.pathname==='/simulator-python-worker.js')res.setHeader('Content-Security-Policy',`default-src 'none'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; connect-src http://${host}/vendor/pyodide/ http://${host}/simulator-vex.py; worker-src 'none'; child-src 'none';`);
   if(url.pathname==='/compiler-worker.mjs')res.setHeader('Content-Security-Policy',`default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src http://${host}/vendor/compiler/ http://${host}/compiler/; worker-src 'none'; child-src 'none';`);
   if(url.pathname==='/simulator-code-worker.mjs'){
@@ -377,6 +385,11 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
+  server.on('error', (e) => {
+    if (e.code !== 'EADDRINUSE') throw e;
+    console.error(`iq-raw: port ${PORT} is already in use, probably by another iq-raw window. Open http://localhost:${PORT}, or stop the other one first (or run with PORT=5175).`);
+    process.exit(1);
+  });
   server.listen(PORT, '127.0.0.1', () => console.log(`iq-raw: open http://localhost:${PORT}  (vexcom: ${findVexcom() || 'NOT FOUND'})`));
 }
 module.exports = { server, vexcom, findVexcom };

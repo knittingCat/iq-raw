@@ -11,8 +11,8 @@ function copy(from,to){
   fs.mkdirSync(path.dirname(to),{recursive:true});
   if(/\.(html|js|mjs|css|py)$/.test(from)){
     let text=fs.readFileSync(from,'utf8');
-    text=text.replace(/(["'`])\/(?=(?:[\w.-]+\.(?:js|mjs|css|html|py)|assets\/|vendor\/|compiler\/|api\/))/g,(_,q)=>q+base);
-    if(from.endsWith("settings.html"))text=text.replace('href="/"','href="'+base+'"');
+    text=text.replace(/(["'`])\/(?=(?:[\w.-]+\.(?:js|mjs|css|html|py)|assets\/|vendor\/|compiler\/|api\/|docs\/))/g,(_,q)=>q+base);
+    if(from.endsWith("settings.html")||from.endsWith("help.html"))text=text.replace('href="/"','href="'+base+'"');
     text=text.replace(/(["'`])((?:\/iq-raw\/|\.\.?\/)[\w./-]+\.(?:js|mjs|css|py|json\.gz))\1/g,(match,q,url)=>url.includes('/vendor/')?match:q+url+'?v='+revision+q);
     fs.writeFileSync(to,text);
   }else fs.copyFileSync(from,to);
@@ -25,6 +25,9 @@ function tree(from,to,filter=()=>true){
   }
 }
 tree(path.join(root,'public'),target);
+// The Help page renders the same troubleshooting guide that the local server serves.
+fs.mkdirSync(path.join(target,'docs'),{recursive:true});
+fs.copyFileSync(path.join(root,'TROUBLESHOOTING.md'),path.join(target,'docs','TROUBLESHOOTING.md'));
 for(const [folder,dest] of [['blockly','blockly'],['@dagrejs/dagre/dist','dagre'],['microbit-clang-wasm/gen','compiler'],['pyodide','preview/python'],['pyodide','pyodide'],['asyncify-wasm/dist','preview/asyncify'],['@bjorn3/browser_wasi_shim/dist','preview/wasi']]){
   // Vendor modules use relative imports; keep their contents untouched.
   const from=path.join(root,'node_modules',folder),to=path.join(target,'vendor',dest);fs.mkdirSync(to,{recursive:true});
@@ -52,7 +55,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const element=document.getElementById(id);if(element){element.disabled=true;element.title='Available in the local IQ Raw app';}
  }
  const mode=document.getElementById('transferMode');if(mode){mode.value='bluetooth';mode.dispatchEvent(new Event('change'));}
- const brain=document.getElementById('brain');if(brain)brain.textContent='Web editor · compile C++ here and connect Bluetooth to transfer';
+ const brain=document.getElementById('brain');if(brain){brain.className='';brain.textContent='Web editor · compile C++ here and connect Bluetooth to transfer';}
 });
 `);
 for(const [source,destination]of [['microbit-clang-wasm/LICENSES','vendor/compiler/LICENSES'],['@dagrejs/dagre/LICENSE','vendor/dagre/LICENSE']]){const from=path.join(root,'node_modules',source);if(fs.existsSync(from))fs.cpSync(from,path.join(target,destination),{recursive:true});}

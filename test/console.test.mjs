@@ -39,6 +39,17 @@ await assert.rejects(service.input('hello'),/Connect/);
 await service.close();
 const bad=createConsole({SerialPort:FakePort,query:async()=>({code:0,out:'{"device":{"connection":"brain","user":"/etc/passwd"}}'})});
 await assert.rejects(bad.connect(),/No IQ brain console port/);
+for(const [user,admin] of [['COM7','COM6'],['/dev/ttyACM1','/dev/ttyACM0']]){
+  const other=createConsole({SerialPort:FakePort,query:async()=>({code:0,out:JSON.stringify({device:{connection:'brain',user,admin}})})});
+  await other.connect();assert.equal(FakePort.instances.at(-1).options.path,user,user+' should open as-is');
+  assert.equal(other.adminPort(),admin,admin+' should be the admin port');await other.close();
+}
+const oddAdmin=createConsole({SerialPort:FakePort,query:async()=>({code:0,out:JSON.stringify({device:{connection:'brain',user:'COM7',admin:'--erase'}})})});
+await oddAdmin.connect();assert.equal(oddAdmin.adminPort(),null,'an admin value that is not a port name must not reach vexcom');await oddAdmin.close();
+for(const user of ['COM7 ','\\\\.\\COM7','/dev/ttyACM1/../sda','/dev/ttyUSB0']){
+  const other=createConsole({SerialPort:FakePort,query:async()=>({code:0,out:JSON.stringify({device:{connection:'brain',user}})})});
+  await assert.rejects(other.connect(),/No IQ brain console port/,user+' must be refused');
+}
 const dom=new JSDOM('<dl id="monitors" hidden></dl><pre id="log"></pre>',{runScripts:'outside-only'});
 dom.window.eval(fs.readFileSync('public/console-renderer.js','utf8'));
 const root=dom.window.document.getElementById('log'),monitors=dom.window.document.getElementById('monitors'),terminal=dom.window.IQConsole.create(root,monitors);

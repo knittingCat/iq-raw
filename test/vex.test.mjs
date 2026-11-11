@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {spawnSync} from 'node:child_process';
+import { python } from "./tools.mjs";
 const require=createRequire(import.meta.url),Blockly=require('blockly');
 globalThis.Blockly=Blockly;Blockly.Python=require('blockly/python').pythonGenerator;
 for(const file of ['iq-blocks','iq-cpp','iq-catalog','iq-math','iq-vex'])require('../public/'+file+'.js');
@@ -18,7 +19,7 @@ for(const s of specs){
   }
 }
 const py=Blockly.Python.workspaceToCode(ws),cpp=Blockly.Cpp.workspaceToCode(ws);
-assert.equal(spawnSync('python3',['-I','-c','import ast,sys;ast.parse(sys.stdin.read())'],{input:py,encoding:'utf8'}).status,0,'Generated Python should parse');
+assert.equal(spawnSync(python,['-I','-c','import ast,sys;ast.parse(sys.stdin.read())'],{input:py,encoding:'utf8'}).status,0,'Generated Python should parse');
 assert.ok(!cpp.includes('is not supported'));
 const checks=`
 import sys,types
@@ -42,7 +43,7 @@ assert iqv_object([Obj()],1,'width')==33
 assert iqv_object([Obj()],0,'width')==0
 assert iqv_object([],1,'width')==0
 `;
-const run=spawnSync('python3',['-I','-c',checks],{encoding:'utf8'});assert.equal(run.status,0,run.stderr);
+const run=spawnSync(python,['-I','-c',checks],{encoding:'utf8'});assert.equal(run.status,0,run.stderr);
 process.env.PORT='5196';const {server}=require('../server.js');
 await new Promise(r=>server.listen(5196,'127.0.0.1',r));
 try{

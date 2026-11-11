@@ -21,13 +21,15 @@
       <button id="previewToggle" type="button" aria-haspopup="dialog" aria-controls="brainPreview" aria-expanded="false">Brain preview</button>
       <button id="fullscreenToggle" type="button" aria-pressed="false">Fullscreen</button>
     </div>
+    <a id="helpLink" class="button-link" href="/help.html" target="_blank" rel="noopener">Help</a>
     <a id="settingsLink" class="button-link" href="/settings.html">Settings</a>
   </div>
   <div class="toolbar" aria-label="Program controls">
     <div class="control-group" id="programConfig">
       <label>Language <select id="lang"><option value="python">Python</option><option value="cpp">C++</option></select></label>
       <label>Slot <select id="slot"></select></label>
-      <label>Name <input type="text" id="name" maxlength="32" value="iq-raw"></label>
+      <label>Name <input type="text" id="name" maxlength="32" value="iq-raw" title="Letters, digits, spaces, _ . and -, up to 32 characters" aria-describedby="nameHint"></label>
+      <span id="nameHint" class="field-hint" role="alert" hidden>Use letters, digits, spaces, _ . or - only.</span>
     </div>
     <div class="control-group">
       <button id="send" class="primary" title="Send the code to the slot and run it">Download and run</button>
@@ -41,14 +43,20 @@
     </div>
   </div>
 </header>
-<div class="connection"><label>Transfer <select id="transferMode"><option value="usb">USB</option><option value="bluetooth">Bluetooth</option></select></label><span id="brain" role="status">Brain: checking...</span><button id="refresh">Check brain</button></div>
+<div class="connection">
+  <label>Transfer <select id="transferMode"><option value="usb">USB</option><option value="bluetooth">Bluetooth</option></select></label>
+  <span id="brain" class="checking" role="status">Brain: checking…</span>
+  <a id="brainHelp" class="help-link" href="/help.html#brain-not-found" target="_blank" rel="noopener" hidden>How to fix</a>
+  <span id="activity" class="activity" role="status" hidden><span class="spinner" aria-hidden="true"></span><span id="activityText"></span></span>
+  <button id="refresh">Check brain</button>
+</div>
 <div id="bluetoothControls" class="bluetooth-controls" hidden><button id="bluetoothConnect" type="button">Connect Bluetooth</button><span id="bluetoothStatus" role="status">Disconnected</span><span id="bluetoothSupport" hidden>Use Chrome or Edge for Bluetooth.</span><details><summary>C++ binary &amp; connection help</summary><p>Pair a powered IQ2 brain using its four-digit screen code. Disconnect it in VEXcode first. Python needs the Python VM already installed. C++ can build in the local app, or you can choose a compiled IQ2 .bin here; choosing a file sends that binary instead of the editor’s C++.</p><label>Compiled IQ2 program <input id="bluetoothBinary" type="file" accept=".bin"></label><span id="bluetoothBinaryName">No binary selected · use editor code</span><button id="bluetoothBinaryClear" type="button">Use editor code</button></details></div>
 <dialog id="bluetoothPinDialog" aria-labelledby="bluetoothPinTitle"><h2 id="bluetoothPinTitle">Pair IQ2 brain</h2><p id="bluetoothPinStatus">Enter the four-digit code displayed on the brain.</p><form id="bluetoothPinForm"><label>Connection code <input id="bluetoothPin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" required></label><button type="submit">Pair</button><button id="bluetoothPinCancel" type="button">Cancel</button></form></dialog>
 <main>
   <section id="blocks" class="editor-panel" aria-labelledby="blocksHeading">
     <div class="panel-heading"><h2 id="blocksHeading">Block workspace</h2><span>Build something that moves</span></div>
     <div id="blocklyDiv"></div>
-    <div class="panel-foot">Drag blocks onto the canvas · Scroll to zoom · Escape exits fullscreen</div>
+    <div class="panel-foot">Drag blocks onto the canvas · Scroll to zoom · Ctrl+Enter downloads and runs · Escape exits fullscreen</div>
   </section>
   <aside id="codeSidebar" class="editor-panel" aria-label="Code and console panels">
     <section id="sourcePanel" aria-labelledby="codeHeading">
@@ -115,6 +123,7 @@
 <script src="/simulator-screen.js"></script>
 <script src="/simulator-audio.js"></script>
 <script src="/simulator-ui.js"></script>
+<script src="/troubleshoot.js"></script>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -131,16 +140,39 @@
 
   // ---- log ----
   const log = (text, cls) => { const s = document.createElement('span'); if (cls) s.className = cls; s.textContent = text + '\n'; $('log').append(s); $('log').scrollTop = 1e9; };
+  // After a failure, link the guide's section for that error. It opens in a new tab so the console stays readable.
+  const logHelp = (text) => {
+    const { anchor, title } = IQHelp.match(text);
+    const a = document.createElement('a');
+    a.className = 'help-link'; a.href = '/help.html#' + anchor; a.target = '_blank'; a.rel = 'noopener';
+    a.textContent = 'How to fix: ' + title;
+    const line = document.createElement('span'); line.append(a, '\n');
+    $('log').append(line); $('log').scrollTop = 1e9;
+  };
   const api = async (path, body) => {
-    const r = await fetch('/api/' + path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    let r;
+    try { r = await fetch('/api/' + path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); }
+    catch { throw new Error('Cannot reach the iq-raw server. Start it again with "npm start" in the iq-raw folder, then retry.'); }
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.statusText);
     return j;
   };
   let bluetooth;
-  const busy = (on) => {['send','sendOnly','run','stop','build','vm','refresh','transferMode','bluetoothConnect','bluetoothBinary','bluetoothBinaryClear'].forEach(id => ($(id).disabled = on));if(!on)document.dispatchEvent(new Event('iqraw-idle'));};
+  // While a tool runs, the buttons that would start another are disabled and the activity line counts the seconds,
+  // since a download or C++ build can take a minute or two.
+  let ticker = null;
+  const busy = (on, label = '') => {
+    ['send','sendOnly','run','stop','build','vm','refresh','transferMode','bluetoothConnect','bluetoothBinary','bluetoothBinaryClear','programs','probe'].forEach(id => ($(id).disabled = on));
+    document.body.classList.toggle('is-busy', on);
+    clearInterval(ticker);
+    $('activity').hidden = !on;
+    if (!on) { document.dispatchEvent(new Event('iqraw-idle')); return; }
+    const text = label ? label[0].toUpperCase() + label.slice(1) : 'Working';
+    const started = Date.now(), show = () => { $('activityText').textContent = `${text}… ${Math.round((Date.now() - started) / 1000)}s`; };
+    show(); ticker = setInterval(show, 1000);
+  };
   async function action(label, path, body) {
-    busy(true); log('> ' + label);
+    busy(true, label); log('> ' + label);
     const holdOutput=['download','run','build','probe'].includes(path);
     if(holdOutput)document.dispatchEvent(new Event('iqraw-command-start'));
     try {
@@ -150,9 +182,9 @@
       if(text)log(text,j.ok?'okk':'err');
       else if(!j.ok)log('(no output)','err');
       if(j.warning)log(j.warning.trim(),'err');
-      if(j.ok)log('Done.','okk');else log(label + ' failed.', 'err');
+      if(j.ok)log('Done.','okk');else { log(label + ' failed.', 'err'); logHelp(j.out); }
       return j;
-    } catch (e) { log(String(e.message || e), 'err'); }
+    } catch (e) { log(String(e.message || e), 'err'); logHelp(String(e.message || e)); }
     finally{if(holdOutput)document.dispatchEvent(new Event('iqraw-command-end'));busy(false);}
   }
 
@@ -162,6 +194,11 @@
   $('name').value = store.get('name', 'iq-raw');
   $('slot').onchange = () => store.set('slot', $('slot').value);
   $('name').onchange = () => store.set('name', $('name').value);
+  // The server stores any other name as "iq-raw", so say so here instead.
+  const nameOk = () => /^[\w .-]{1,32}$/.test($('name').value.trim());
+  const checkName = () => { const ok = nameOk(); $('name').setAttribute('aria-invalid', String(!ok)); $('nameHint').hidden = ok; return ok; };
+  $('name').addEventListener('input', checkName);
+  checkName();
 
   // ---- blocks and code ----
   // CSS variables keep Blockly in sync with the selected app theme.
@@ -229,7 +266,7 @@
   // ---- file open / save ----
   $('save').onclick = () => {
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([code.value], { type: 'text/x-python' }));
+    a.href = URL.createObjectURL(new Blob([code.value], { type: lang === 'cpp' ? 'text/x-c++src' : 'text/x-python' }));
     a.download = ($('name').value.trim() || 'iq-raw').replace(/[^\w.-]+/g, '_') + (lang === 'cpp' ? '.cpp' : '.py');
     a.click(); URL.revokeObjectURL(a.href);
   };
@@ -242,7 +279,9 @@
 
   // ---- brain ----
   async function checkBrain() {
-    const el = $('brain'); el.className = ''; el.textContent = 'Brain: checking...';
+    const el = $('brain'), fix = $('brainHelp'), refresh = $('refresh'), body = document.body;
+    el.className = 'checking'; el.textContent = 'Brain: checking…'; fix.hidden = true;
+    refresh.disabled = true;
     try {
       const j = await api('info');
       if (j.ok) {
@@ -255,14 +294,31 @@
         const bits = [typeof b.name === 'string' && b.name, typeof b.vexos === 'string' && ver(b.vexos) && 'VEXos ' + ver(b.vexos), Number.isFinite(Number(battery)) && battery != null && 'battery ' + battery + '%'].filter(Boolean);
         el.textContent = 'Brain: connected' + (bits.length ? ' (' + bits.join(', ') + ')' : '');
         el.className = 'ok';
-      } else { el.textContent = 'Brain: not found. Plug it in by USB and turn it on.'; el.className = 'bad'; log(j.out.trim(), 'err'); }
-    } catch (e) { el.textContent = 'Brain: ' + e.message; el.className = 'bad'; }
+      } else {
+        // Name the actual cause, e.g. missing VEX tools rather than a missing brain, and link its section.
+        const help = IQHelp.match(j.out.includes('exited with code') || j.out.includes('was not found') ? j.out : 'Brain: not found');
+        el.textContent = help.anchor === 'vexcom-was-not-found' ? 'Brain: cannot check. VEX’s vexcom tool is not installed yet.'
+          : help.anchor === 'the-brain-is-busy-or-the-port-is-in-use' ? 'Brain: busy. Another app is using its USB port.'
+          : 'Brain: not found. Plug it in by USB and turn it on.';
+        el.className = 'bad';
+        log(j.out.trim(), 'err'); logHelp(j.out);
+        fix.href = '/help.html#' + help.anchor; fix.hidden = false;
+      }
+    } catch (e) {
+      el.textContent = 'Brain: ' + e.message; el.className = 'bad';
+      fix.href = '/help.html#' + IQHelp.match(e.message).anchor; fix.hidden = false;
+    } finally { refresh.disabled = body.classList.contains('is-busy'); }
   }
   $('refresh').onclick = checkBrain;
-  $('programs').onclick = async () => { busy(true); log('> programs'); try { const j = await api('programs'); log(j.out.trim() || '(none)', j.ok ? 'okk' : 'err'); } catch (e) { log(e.message, 'err'); } finally { busy(false); } };
+  $('programs').onclick = async () => {
+    busy(true, 'listing programs on the brain'); log('> programs');
+    try { const j = await api('programs'); log(j.out.trim() || '(none)', j.ok ? 'okk' : 'err'); if (!j.ok) logHelp(j.out); }
+    catch (e) { log(e.message, 'err'); logHelp(e.message); } finally { busy(false); }
+  };
   const slot = () => Number($('slot').value);
   const send = (run) => async () => {
     if (!code.value.trim()) return log('Nothing to send.', 'err');
+    if (!checkName()) { $('name').focus(); return log('Fix the program name first: letters, digits, spaces, _ . and - only, up to 32 characters.', 'err'); }
     await action(`download to slot ${slot()}${run ? ' and run' : ''}`, 'download', { code: code.value, slot: slot(), name: $('name').value, run, lang });
   };
   $('send').onclick = send(true);
@@ -272,6 +328,15 @@
   $('run').onclick = () => action(`run slot ${slot()}`, 'run', { slot: slot() });
   $('stop').onclick = () => action('stop', 'stop', {});
   $('vm').onclick = () => confirm('Put the Python VM on the brain now? This takes a minute. Do not unplug it.') && action('install Python VM', 'python-vm', {});
+  // Ctrl+Enter (Cmd+Enter on a Mac) downloads and runs, Ctrl+S saves the code, Ctrl+B builds C++. Buttons stay the source of truth,
+  // so a shortcut does nothing while they are disabled or hidden.
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+    const id = { Enter: 'send', s: 'save', b: 'build' }[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+    if (!id) return;
+    e.preventDefault();
+    if (!$(id).disabled && !$(id).hidden) $(id).click();
+  });
   bluetooth=IQBluetoothUI.attach({api,log,language:()=>lang,code:()=>code.value});
   IQEditor.setup(ws, {api, log,bluetooth});
   IQProgramTree.attach(ws);
