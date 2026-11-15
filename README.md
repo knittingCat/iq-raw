@@ -6,7 +6,9 @@ Drag blocks or write raw code, and send it to a VEX IQ (2nd generation) brain ov
 
 ## Install
 
-macOS only. Paste this whole block into Terminal. It installs Node, git and VS Code (skipping any you already have), adds VEX's VS Code extension, gets this project, and starts it:
+Works on macOS, Windows and Linux. Each block below installs Node, git and VS Code (skipping any you already have), adds VEX's VS Code extension, gets this project, and starts it.
+
+**macOS:** paste this into Terminal. You need [Homebrew](https://brew.sh) for the first line.
 
 ```sh
 brew install node git && brew install --cask visual-studio-code \
@@ -15,23 +17,33 @@ brew install node git && brew install --cask visual-studio-code \
 && npm install && npm start
 ```
 
-Then open http://localhost:5174 in Chrome, Safari or Firefox.
+**Windows 10 or 11:** paste this into PowerShell. It uses `winget`, which Windows already has. Close and reopen PowerShell after the first line so it finds the new programs, then run the rest:
 
-You need [Homebrew](https://brew.sh) for the first line. If you already have Node, git and VS Code, only the last three lines matter.
+```powershell
+winget install -e --id OpenJS.NodeJS.LTS; winget install -e --id Git.Git; winget install -e --id Microsoft.VisualStudioCode
+code --install-extension vexrobotics.vexcode
+git clone https://github.com/knittingCat/iq-raw.git; cd iq-raw; npm install; npm start
+```
 
-**One manual step, needed for both languages:** installing the extension is not enough. It downloads its tools (including `vexcom`, which sends programs to the brain) the first time you use it. Open VS Code, press Cmd+Shift+P, type "New Project", pick the VEX one (or use the VEX icon in the sidebar), and make an **IQ (2nd gen) C++** project once. Wait for the downloads to finish. For Python mode this makes `vexcom` appear; for C++ mode it also gets VEX's C++ SDK and compiler. If iq-raw says "vexcom was not found", this step is what is missing.
+**Linux:** install Node 18 or newer, git and VS Code with your package manager, then run the last three lines of the macOS block. To use the brain's USB ports without root, add yourself to the group that owns `/dev/ttyACM*` (usually `dialout`: `sudo usermod -aG dialout $USER`), then log out and back in.
+
+Then open http://localhost:5174 in Chrome, Edge, Safari or Firefox. If you already have Node, git and VS Code, only the last three commands matter.
+
+**One manual step, needed for both languages:** installing the extension is not enough. It downloads its tools (including `vexcom`, which sends programs to the brain) the first time you use it. Open VS Code, press Cmd+Shift+P (Ctrl+Shift+P on Windows and Linux), type "New Project", pick the VEX one (or use the VEX icon in the sidebar), and make an **IQ (2nd gen) C++** project once. Wait for the downloads to finish. For Python mode this makes `vexcom` appear; for C++ mode it also gets VEX's C++ SDK and compiler. If iq-raw says "vexcom was not found", this step is what is missing.
 
 On Apple Silicon Macs, VEX's `vexcom` is an Intel program, so macOS may ask to install Rosetta the first time.
 
-For C++ builds, wait for the toolchain download and extraction to finish. If it was interrupted, run VEX's **Download Toolchain** command in VS Code again. iq-raw supports both `toolchain_osxarm64` and `toolchain_osx64`, and also checks `~/.iq-raw/toolchains` for a local installation. A ZIP file alone is not an installed toolchain.
+For C++ builds, wait for the toolchain download and extraction to finish. If it was interrupted, run VEX's **Download Toolchain** command in VS Code again. iq-raw looks for the same toolchain folder VEX's extension uses (`toolchain_osxarm64` or `toolchain_osx64` on a Mac, `toolchain_win32` or `toolchain_winarm64` on Windows, `toolchain_linux64` or `toolchain_linuxarm64` on Linux), and also checks `~/.iq-raw/toolchains` for a local installation. A ZIP file alone is not an installed toolchain.
 
 Before downloading to a brain, disconnect it in VEXcode IQ or save and quit VEXcode IQ. Another app holding the brain's USB ports open can interfere with transfers even when **Check brain** succeeds.
 
-To run it again later: `cd iq-raw && npm start`. To stop it: Ctrl+C in that Terminal window.
+To run it again later: `cd iq-raw && npm start`. To stop it: Ctrl+C in that Terminal or PowerShell window. If port 5174 is taken, pick another: `PORT=5175 npm start` (macOS/Linux) or `$env:PORT=5175; npm start` (PowerShell).
+
+**Something not working?** See [TROUBLESHOOTING.md](TROUBLESHOOTING.md). It covers the server, missing VEX tools, a brain that is [not found](TROUBLESHOOTING.md#brain-not-found) or [busy](TROUBLESHOOTING.md#the-brain-is-busy-or-the-port-is-in-use), every `vexcom` exit code, C++ builds, the live console, Bluetooth and the preview. The same guide is built into iq-raw: press **Help**, or the **How to fix** link that appears under an error in the console.
 
 ## How to use it
 
-1. **Plug the brain in** with a USB-C cable and turn it on. If macOS shows an **"Allow accessory to connect?"** prompt, click **Allow**. Until you do, the Mac lists the brain but blocks it, and iq-raw (and VS Code's VEX extension) report "Device not specified or not found" or "no device connected". Press **Check brain** (top right). It says "connected" when it finds the brain.
+1. **Plug the brain in** with a USB-C cable and turn it on. If macOS shows an **"Allow accessory to connect?"** prompt, click **Allow**. Until you do, the Mac lists the brain but blocks it, and iq-raw (and VS Code's VEX extension) report "Device not specified or not found" or "no device connected". Press **Check brain** (top right). The status next to it turns green and says "connected" when it finds the brain. If it turns red, it says why (no brain, brain busy, or VEX tools missing), with a **How to fix** link.
 2. **Pick a language** in the top bar: Python or C++.
 3. **Pick a slot** (1 to 8) and a name. This is where the program is stored on the brain and the name it shows.
 4. **Make the program**, either way:
@@ -49,11 +61,13 @@ During a build/download/run, incoming program text and monitor updates are buffe
 
 New or empty workspaces start with **when started** already on the canvas. Toolbox blocks must be dragged onto it; clicking a toolbox block does not insert it. Categories use coloured dots, numeric/text reporters are rounded, and Boolean reporters are hexagonal.
 
+**Shortcuts:** Ctrl+Enter (Cmd+Enter on a Mac) downloads and runs, Ctrl+S saves the code to a file, and Ctrl+B builds in C++ mode.
+
 The header's icon buttons independently collapse program controls, source code, and console. **Fullscreen focus mode** collapses all three and turns the main actions into icon buttons with tooltips. Reopen the panels you need using the header buttons; Escape or the fullscreen button restores the previous layout.
 
 **Brain preview:** use the chip-shaped **Brain preview** button in the header, then **Run blocks**. The offline simulator executes a snapshot of your blocks in a browser worker and draws a 160 × 108 screen over a realistic IQ2 brain illustration with left/right arrows, Check and X. **Enlarge screen** makes graphs easier to inspect; **Save screen** exports a PNG. **Try drawing demo** runs a sample without changing your workspace. Check triggers brain-button events, and X/Stop/closing the preview terminates simulation. No brain, USB connection, Python installation or C++ build is needed.
 
-The preview supports screen text/drawing, graphs, real/complex math and numerical calculus, variables, lists, loops, conditions, procedures, timers and console print. **Run Python code** executes the code editor with Pyodide in a browser worker. **Run C++ code** in the local app compiles to sandboxed WebAssembly; install that preview compiler once with `npm run setup-preview`. These code previews support screen/buttons/console/timing/musical notes, with approximate browser fonts and timing. The concurrent Python preview engine, attached-motor visualization and synthesized sound effects from the newer upstream commits are retained. Robot motion and sounds remain approximate; C++ callbacks and threads are unsupported. Stop/close terminates the worker. The hosted C++ **Build only / Download** compiler below targets the actual brain; C++ code preview still uses the local app. Generated image details are in [asset notes](public/assets/README.md).
+The preview supports screen text/drawing, graphs, real/complex math and numerical calculus, variables, lists, loops, conditions, procedures, timers and console print. **Run Python code** executes the code editor with Pyodide in a browser worker. **Run C++ code** in the local app compiles to sandboxed WebAssembly; install that preview compiler once with `npm run setup-preview` (macOS, Windows or Linux, x64 or arm64; it downloads the matching [WASI SDK](https://github.com/WebAssembly/wasi-sdk) over several parallel connections and checks its SHA-256). On macOS the compiler runs inside a `sandbox-exec` profile; Windows and Linux have no equivalent, so there it relies on the same source checks (allow-listed headers only; no assembly, embedded files, `%:` digraph directives, `__has_include` or `_Pragma`). These code previews support screen/buttons/console/timing/musical notes, with approximate browser fonts and timing. The concurrent Python preview engine, attached-motor visualization and synthesized sound effects from the newer upstream commits are retained. Robot motion and sounds remain approximate; C++ callbacks and threads are unsupported. Stop/close terminates the worker. The hosted C++ **Build only / Download** compiler below targets the actual brain; C++ code preview still uses the local app. Generated image details are in [asset notes](public/assets/README.md).
 
 **Program tree:** the tree icon opens a fullscreen, pannable and zoomable graph of the actual workspace. Vector icons and colors distinguish providers, operators, controls, events and actions. Arrows connect input dependencies, control branches and following statements. **Run & trace** executes a snapshot of the blocks offline, showing latest values, true/false counts, executed branches, last-assignment links and errors at their originating nodes. Click a node for its inputs, error context and a link back to the workspace. Check activates brain-button event paths. Stop, close or workspace changes terminate the trace; JSON export includes the evidence and graph connections. “Never activates” is reserved for constant conditions, disabled blocks and unconditional termination; unvisited dynamic paths remain uncertain. This traces blocks, not hand-edited Python/C++ or real hardware. Layout uses [Dagre](https://github.com/dagrejs/dagre).
 
@@ -113,7 +127,7 @@ Attach blocks underneath **when started**. Those blocks run once in order when t
 
 The hardware block families are checked against the [VEXcode IQ2 block reference](https://api.vex.com/iq2/home/blocks/index.html) and the installed IQ2 Python stubs/C++ headers. Vision requires sensor calibration: paste exported signature/colour values into setup blocks, and configure AI models in VEX's Vision Utility. Merely selecting a port does not calibrate a sensor. Hardware-specific sensing needs the corresponding connected device. Console monitors sample a global variable or sensor reporter every 250 ms and display up to 32 named readings; local function parameters/loop variables are unsupported. GPS is outside the IQ2 block reference. The original **Lists (Python)** category remains Python-only; the new named **Lists** and **2D lists** categories support both languages.
 
-The live console uses the IQ2's separate USB user port; when connected, downloads and program control explicitly target the discovered admin port while the console keeps listening. VM installation pauses and reconnects the console because it can reset the USB connection. Failed transfers include port-owner diagnostics; version errors include the detected brain firmware and SDK target, rather than assuming firmware is outdated. Transfers that have started are not retried automatically. If the console cannot connect, running a program reports a visible warning that output may be missed.
+The live console uses the IQ2's separate USB user port; when connected, downloads and program control explicitly target the discovered admin port while the console keeps listening. VM installation pauses and reconnects the console because it can reset the USB connection. Failed transfers include port diagnostics (the apps holding the port on macOS; whether the brain's ports are present on Windows and Linux); version errors include the detected brain firmware and SDK target, rather than assuming firmware is outdated. Transfers that have started are not retried automatically. If the console cannot connect, running a program reports a visible warning that output may be missed.
 
 ## How it works
 
@@ -132,19 +146,21 @@ The live console uses the IQ2's separate USB user port; when connected, download
 - **The page** (`public/index.html`) uses Google's Blockly library to draw the blocks. The files `public/iq-blocks.js` (Python) and `public/iq-cpp.js` (C++) turn each block into code. Both live in the page, so what you see in the code box is exactly what gets sent.
 - **The server** (`server.js`) is a small local web server. It runs VEX's own tools for device discovery, downloads and execution. The optional live console uses `serialport` to open only the brain user port discovered by `vexcom`, at 115200 baud, and streams text to the browser through server-sent events.
 - **`vexcom`** is VEX's download tool. It ships inside VEX's VS Code extension, and on first start the server copies it to `~/.iq-raw/vexcom`. It speaks the brain's USB protocol, packages Python programs the way the brain expects, and writes the program into the slot. This is why iq-raw does not need its own copy of the protocol.
-- **C++ builds** use VEX's own SDK, clang compiler and project makefile, taken from the same VS Code extension. The server unzips VEX's empty IQ (2nd gen) C++ project into a temporary folder, drops your `main.cpp` in, runs `make`, and sends the `.bin` it produces. The temporary folder is deleted afterwards.
+- **C++ builds** use VEX's own SDK, clang compiler and project makefile, taken from the same VS Code extension. The server unpacks VEX's empty IQ (2nd gen) C++ project into a temporary folder, drops your `main.cpp` in, runs `make`, and sends the `.bin` it produces. The temporary folder is deleted afterwards.
 - **Pins:** the Python on the brain has no pin calls. The C++ SDK does: `vexGenericDigitalEnable`, `vexGenericDigitalOutput`, `vexGenericDigitalInput`, `vexDigitalPinGet`, `vexAnalogPinGet`. The headers do not explain what the pin number and options mean. The one-block "write to prong of port N" uses enable options 0 and pin 0 as a starting guess.
 - **Safety:** the server listens on 127.0.0.1 only, checks the Host and Origin of every request, and accepts only JSON, because anything that can reach it can overwrite programs on a brain. Your work is also saved in the browser (localStorage), per language.
 
 ### Files
 
 - `server.js` : local server, runs `vexcom` and the C++ build.
+- `zip.js` : unpacks VEX's C++ project template, so no `unzip` program is needed.
 - `public/index.html` : the editor page and its buttons.
 - `public/iq-blocks.js` : block definitions, the Python generator, the toolbox.
 - `public/iq-cpp.js` : the C++ generator.
 - `public/iq-catalog.js` : the table of most IQ blocks (label, Python and C++ for each); both generators are built from it.
 - `public/iq-vex.js` : console, pneumatics, motor groups, Vision/AI Vision, data, lists and additional control/operator blocks.
 - `public/editor-ui.js`, `public/console-renderer.js`, `serial-console.js` : drag-only toolbox, fullscreen/panel controls, and the live USB console.
+- `TROUBLESHOOTING.md`, `public/help.html`, `public/help.js`, `public/markdown.js`, `public/troubleshoot.js` : the troubleshooting guide, the in-app Help page that renders it, and the rules that link console errors to its sections.
 - `test/*.test.mjs` : check generator output, server guards, numerical math, starter/drag/fullscreen behavior, and mocked serial I/O/ANSI rendering. Catalog and added VEX blocks are generated with every dropdown option, Python is parsed, and C++ is compiled against VEX's SDK when installed. Run with `npm test`. Serial mocks do not substitute for physical-brain console testing.
 
 ## Testing with a real brain
@@ -160,6 +176,6 @@ Not checked on a brain: the Python for every block. It follows VEX's block docs 
 
 ## Limits
 
-- macOS only for now. The server looks for VEX's tools in the macOS locations.
+- macOS is the most tested. Windows and Linux use the same VEX tools from the same extension. Their tool discovery and build steps are covered by tests with stand-in tools, but have not run against a real brain or VEX's real compiler yet. After a failed transfer, macOS names the apps holding the brain's USB ports; Windows and Linux only report whether the brain's ports are present and which they are.
 - IQ 2nd generation only. The 1st generation brain has no Python and a different protocol.
 - Needs VS Code and VEX's extension for `vexcom` and the C++ SDK. They are VEX's software and are not included here.

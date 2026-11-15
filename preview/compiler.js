@@ -4,6 +4,9 @@ const headers=new Set(['vex.h','stdint.h','cstdint','stddef.h','cstddef','stdio.
 function validate(code){
   if(typeof code!=='string'||!code.trim()||code.length>200000)throw Error('Preview requires nonempty code, at most 200000 characters.');
   const normalized=code.replace(/\\\r?\n/g,'').replace(/\/\*[\s\S]*?\*\//g,' ');
+  // Only #-lines are checked below, so the other spellings of a directive are refused outright: the %: digraph for #,
+  // __has_include (which probes host files) and _Pragma (the operator form of #pragma).
+  if(/%:|\b__has_include|\b_Pragma\b/.test(normalized))throw Error('Code preview does not accept %: digraphs, __has_include or _Pragma. Write directives with #.');
   for(const line of normalized.split(/\r?\n/)){
     const directive=line.match(/^\s*#\s*(\w+)(.*)$/);if(!directive)continue;
     const [,name,args]=directive;
@@ -14,7 +17,6 @@ function validate(code){
   }
   if(/\b(?:asm|__asm|__asm__)\b|\.incbin|__has_embed/.test(normalized))throw Error('Assembly and embedded host files are unavailable in code preview.');
 }
-function sdk(){const folder=`wasi-sdk-34.0-${process.arch==='arm64'?'arm64':'x86_64'}-macos`;return path.join(os.homedir(),'.iq-raw','preview',folder);}
 function execute(bin,args,{cwd,env=process.env,timeout=30000}={}){
   return new Promise(resolve=>{
     const child=spawn(bin,args,{cwd,env});let out='';let ended=false;
@@ -27,17 +29,29 @@ function execute(bin,args,{cwd,env=process.env,timeout=30000}={}){
 let building=false;
 async function compile(code){
   validate(code);
-  if(process.platform!=='darwin')throw Error('C++ code preview currently requires macOS. Block and Python previews run in the browser.');
-  const tool=sdk(),clang=path.join(tool,'bin','clang++');
+  const wasi=require('./wasi-sdk').wasiSdk();
+  if(!wasi)throw Error(`C++ code preview has no compiler for ${process.platform} on ${process.arch}. Block and Python previews run in the browser.`);
+  const tool=wasi.folder,clang=wasi.clang;
   if(!fs.existsSync(clang))throw Error('The browser-preview compiler is not installed. Run npm run setup-preview once, then retry.');
   if(building)throw Error('Another code preview is compiling. Wait for it to finish and retry.');
   building=true;const dir=fs.mkdtempSync(path.join(os.tmpdir(),'iqraw-preview-'));
   try{
     fs.writeFileSync(path.join(dir,'main.cpp'),code);fs.copyFileSync(path.join(__dirname,'vex.h'),path.join(dir,'vex.h'));
-    const quote=s=>JSON.stringify(fs.realpathSync(s));
-    const profile=`(version 1)(allow default)(deny network*)(deny file-read-data (subpath "/Users")(subpath "/private")(subpath "/Volumes"))(allow file-read-data (subpath ${quote(tool)})(subpath ${quote(dir)})(subpath "/private/var/db/dyld"))(deny file-write*)(allow file-write* (subpath ${quote(dir)})(literal "/dev/null"))`;
     const flags=['-std=c++17','-O1','-fno-exceptions','-fno-rtti','-ftemplate-depth=128','-fconstexpr-depth=128','-fconstexpr-steps=200000','-I',dir,'main.cpp','-o','raw.wasm','-Wl,--export=malloc','-Wl,--max-memory=67108864','-Wl,-z,stack-size=1048576'];
-    const result=await execute('/usr/bin/sandbox-exec',['-p',profile,clang,...flags],{cwd:dir,env:{PATH:path.join(tool,'bin')+':/usr/bin:/bin',HOME:dir,TMPDIR:dir,LC_ALL:'C'}});
+    let result;
+    if(process.platform==='darwin'){
+      const quote=s=>JSON.stringify(fs.realpathSync(s));
+      const profile=`(version 1)(allow default)(deny network*)(deny file-read-data (subpath "/Users")(subpath "/private")(subpath "/Volumes"))(allow file-read-data (subpath ${quote(tool)})(subpath ${quote(dir)})(subpath "/private/var/db/dyld"))(deny file-write*)(allow file-write* (subpath ${quote(dir)})(literal "/dev/null"))`;
+      result=await execute('/usr/bin/sandbox-exec',['-p',profile,clang,...flags],{cwd:dir,env:{PATH:path.join(tool,'bin')+':/usr/bin:/bin',HOME:dir,TMPDIR:dir,LC_ALL:'C'}});
+    }else{
+      // Windows and Linux have no sandbox-exec. validate() still limits the source to allow-listed headers with no
+      // assembly or embedded files, and clang runs in a throwaway folder with a minimal environment. (VEX's own C++
+      // build already runs its clang on the same code unsandboxed on every OS.)
+      const bin=path.join(tool,'bin'),system=process.platform==='win32'?[path.join(process.env.SystemRoot||'C:\\Windows','System32')]:['/usr/bin','/bin'];
+      const env={PATH:[bin,...system].join(path.delimiter),HOME:dir,TMPDIR:dir,TMP:dir,TEMP:dir,LC_ALL:'C'};
+      if(process.platform==='win32')Object.assign(env,{SystemRoot:process.env.SystemRoot||'C:\\Windows',USERPROFILE:dir});
+      result=await execute(clang,flags,{cwd:dir,env});
+    }
     if(result.code!==0)return {ok:false,out:result.out};
     if(fs.statSync(path.join(dir,'raw.wasm')).size>8*1024*1024)throw Error('Compiled preview is too large (8 MB maximum).');
     const converted=await execute(process.execPath,[path.join(__dirname,'asyncify.mjs'),path.join(dir,'raw.wasm'),path.join(dir,'preview.wasm')],{cwd:ROOT});
@@ -45,4 +59,4 @@ async function compile(code){
     return {ok:true,wasm:fs.readFileSync(path.join(dir,'preview.wasm')).toString('base64'),out:result.out.trim()};
   }finally{building=false;fs.rmSync(dir,{recursive:true,force:true});}
 }
-module.exports={compile,validate,sdk};
+module.exports={compile,validate};

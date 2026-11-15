@@ -2,6 +2,7 @@
 // (the compile is skipped if the VEX extension's C++ SDK is not installed).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { python } from "./tools.mjs";
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const Blockly = require('blockly');
@@ -40,7 +41,7 @@ function make(gen, state) {
   Blockly.serialization.workspaces.load(state, ws);
   return gen.workspaceToCode(ws);
 }
-const pyParses = (code) => spawnSync('python3', ['-I', '-c', 'import ast,sys; ast.parse(sys.stdin.read())'], { input: code, encoding: 'utf8' });
+const pyParses = (code) => spawnSync(python, ['-I', '-c', 'import ast,sys; ast.parse(sys.stdin.read())'], { input: code, encoding: 'utf8' });
 
 // functions, loops, variables and a Python-only list block, in a second program
 const extraState = { blocks: { languageVersion: 0, blocks: [

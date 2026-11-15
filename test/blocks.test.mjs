@@ -139,7 +139,7 @@ const path = require('node:path');
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'iqraw-vexcom-test-'));
 const originalVexcom = process.env.VEXCOM;
 try {
-  const tool = path.join(fixture, 'vexcom');
+  const tool = path.join(fixture, 'vexcom.js');
   const calls = path.join(fixture, 'calls.jsonl');
   fs.writeFileSync(tool, `#!${process.execPath}
 const fs = require('node:fs');
@@ -177,6 +177,7 @@ else console.log('{"status":0,"message":"Download complete"}');
   assert.ok(!fs.existsSync(first.file), 'temporary code should be cleaned after failure');
   const port = await send('port');
   assert.match(port.out, /code 6 \(serial port error/);
+  if (process.platform !== 'darwin') assert.match(port.out, /VEX USB ports (are )?present/, 'Windows/Linux should report whether the brain ports exist');
   const version = await send('version');
   assert.match(version.out,/Brain VEXos: 1\.0\.9\.0/);
   assert.match(version.out,/Python VM is installed/);
@@ -186,7 +187,8 @@ else console.log('{"status":0,"message":"Download complete"}');
   assert.equal(attempts().length-beforePartial,1,'A partially completed download must never trigger the option fallback');
   const killed = await send('signal');
   assert.equal(killed.ok, false);
-  assert.match(killed.out, /terminated by SIGTERM/);
+  // Windows has no signals: a process that kills itself simply exits with code 1.
+  assert.match(killed.out, process.platform === 'win32' ? /exited with code 1/ : /terminated by SIGTERM/);
   const beforeOld = attempts().length;
   const old = await send('old', true);
   assert.equal(old.ok, true);
