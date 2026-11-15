@@ -40,7 +40,7 @@
     const roots=(state.blocks?.blocks||[]).map(b=>add(b));return {nodes,byId,roots};
   }
   function valueText(value){if(typeof value==='string')return JSON.stringify(value.slice(0,160));if(typeof value==='number'&&!Number.isFinite(value))return String(value);try{return JSON.stringify(value)??String(value);}catch{return String(value);}}
-  function kind(b){if(b.type.startsWith('controls_')||['iqv_forever','iqv_repeat_until','iq_wait_until'].includes(b.type))return 'Control';if(b.type==='variables_get'||/_get$/.test(b.type)||b.type.startsWith('iq_b_')||['math_number','text','logic_boolean','iqm_constant','math_constant'].includes(b.type))return 'Data provider';if(/^(math_|logic_|iqm_)/.test(b.type))return 'Operator';if(/^(iq_ev_|iq_when_)/.test(b.type))return 'Event';return 'Action';}
+  function kind(b){if(b.type.startsWith('controls_')||['iqv_forever','iqv_repeat_until','iq_wait_until'].includes(b.type))return 'Control';if(b.type==='iq_mb_argument'||b.type==='variables_get'||/_get$/.test(b.type)||b.type.startsWith('iq_b_')||['math_number','text','logic_boolean','iqm_constant','math_constant'].includes(b.type))return 'Data provider';if(/^(math_|logic_|iqm_)/.test(b.type))return 'Operator';if(/^(iq_ev_|iq_when_)/.test(b.type))return 'Event';return 'Action';}
   function attach(ws){
     const $=id=>document.getElementById(id),dialog=$('programTree'),svg=$('treeGraph'),summary=$('treeSummary'),inspector=$('treeInspector');
     const labels=document.createElement('div');labels.className='graph-link-labels';labels.setAttribute('aria-hidden','true');svg.parentElement.append(labels);
@@ -94,7 +94,8 @@
       const connect=(from,to,label,kind,key)=>{const edge={from,to,label,kind,key,id:'edge-'+edges.length};edges.push(edge);graph.setEdge(from,to,{label,width:Math.min(150,label.length*7),height:18},edge.id);};
       for(const node of model.nodes){
         for(const child of node.children)isBody(child)?connect(node.id,child.id,child.input==='ELSE'?'false / else':child.input==='DO0'?'true':child.input,'branch',child.input):connect(child.id,node.id,({TEXT:'Text',VALUE:'Value',DEG:'Degrees',SECS:'Seconds',COND:'Condition',BOOL:'Condition'})[child.input]||child.input,'data',child.input);
-        if(node.next)connect(node.id,node.next.id,'Next','flow','next');
+        if(node.next)connect(node.id,node.next.id,node.block.type==='iq_mb_define'?'Body':'Next','flow','next');
+        if(node.block.type==='iq_mb_call'&&model.byId.has(node.block.extraState?.definitionId))connect(node.id,node.block.extraState.definitionId,'Call','flow','call');
       }
       root.dagre.layout(graph);
       const world=element('g',{class:'graph-world'}),wireLayer=element('g',{class:'graph-connections'}),nodesLayer=element('g');world.append(wireLayer,nodesLayer);svg.append(world);

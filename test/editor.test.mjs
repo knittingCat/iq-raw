@@ -10,7 +10,7 @@ const matrix={a:1,b:0,c:0,d:1,e:0,f:0,inverse(){return this;},multiply(){return 
 w.SVGElement.prototype.getScreenCTM=()=>matrix;
 w.SVGElement.prototype.getCTM=()=>matrix;
 w.ResizeObserver=class{observe(){}disconnect(){}};
-w.TextEncoder=TextEncoder;w.TextDecoder=TextDecoder;
+w.TextEncoder=TextEncoder;w.TextDecoder=TextDecoder;w.structuredClone=structuredClone;
 w.matchMedia=()=>({matches:false,addEventListener(){}});
 w.EventSource=class{
   static instances=[];
@@ -23,7 +23,7 @@ w.fetch=async()=>({ok:true,json:async()=>({ok:false,out:'No mock brain'})});
 Object.defineProperty(w.navigator,'clipboard',{value:{writeText:async()=>{}}});
 w.document.documentElement.requestFullscreen=async()=>{Object.defineProperty(w.document,'fullscreenElement',{value:w.document.documentElement,configurable:true});w.document.dispatchEvent(new w.Event('fullscreenchange'));};
 w.document.exitFullscreen=async()=>{Object.defineProperty(w.document,'fullscreenElement',{value:null,configurable:true});w.document.dispatchEvent(new w.Event('fullscreenchange'));};
-for(const file of ['node_modules/blockly/blockly_compressed.js','node_modules/blockly/blocks_compressed.js','node_modules/blockly/python_compressed.js','node_modules/blockly/msg/en.js','node_modules/@dagrejs/dagre/dist/dagre.min.js',...['iq-blocks','iq-cpp','iq-catalog','iq-math','iq-vex','editor-ui','console-renderer','transfer-ui','bluetooth','bluetooth-ui','simulator-devices','simulator-audio','simulator-core','program-tree','simulator-screen','simulator-ui'].map(n=>'public/'+n+'.js')]) w.eval(fs.readFileSync(file,'utf8'));
+for(const file of ['node_modules/blockly/blockly_compressed.js','node_modules/blockly/blocks_compressed.js','node_modules/blockly/python_compressed.js','node_modules/blockly/msg/en.js','node_modules/@dagrejs/dagre/dist/dagre.min.js',...['iq-blocks','iq-cpp','iq-catalog','iq-math','iq-vex','my-blocks','editor-ui','console-renderer','transfer-ui','bluetooth','bluetooth-ui','simulator-devices','simulator-audio','simulator-core','program-tree','simulator-screen','simulator-ui'].map(n=>'public/'+n+'.js')]) w.eval(fs.readFileSync(file,'utf8'));
 w.eval([...w.document.querySelectorAll('script')].find(s=>!s.src).textContent);
 const B=w.Blockly,ws=B.getMainWorkspace(),$=id=>w.document.getElementById(id);
 try{
@@ -116,6 +116,33 @@ try{
   assert.match($('treeInspector').textContent,/Operator/);assert.match($('treeInspector').textContent,/Input dependencies/);
   $('treeRun').click();const traceWorker=w.Worker.instances.at(-1);assert.equal(traceWorker.messages[0].trace,true);
   $('treeClose').click();assert.equal(traceWorker.terminated,true);
+  $('myBlockDialog').showModal=()=> $('myBlockDialog').setAttribute('open','');
+  $('myBlockDialog').close=()=> $('myBlockDialog').removeAttribute('open');
+  ws.getButtonCallback('IQ_MAKE_BLOCK')();
+  assert.equal($('myBlockDialog').open,true);
+  $('myBlockName').value='show a value';$('myBlockName').dispatchEvent(new w.Event('input'));
+  $('myBlockAdd_number').click();$('myBlockAdd_boolean').click();$('myBlockAdd_label').click();
+  assert.equal($('myBlockPreview').querySelectorAll('.number').length,1);
+  assert.equal($('myBlockPreview').querySelectorAll('.boolean').length,1);
+  $('myBlockForm').dispatchEvent(new w.Event('submit',{cancelable:true}));
+  assert.equal($('myBlockError').textContent,'');
+  const custom=ws.getAllBlocks(false).find(b=>b.type==='iq_mb_define');assert.ok(custom);
+  assert.equal(custom.getInputTargetBlock('PARAM1').outputConnection.getCheck()[0],'Boolean');
+  const pulled=custom.getInputTargetBlock('PARAM0');pulled.unplug();
+  await new Promise(resolve=>w.setTimeout(resolve,30));
+  assert.notEqual(custom.getInputTargetBlock('PARAM0'),pulled,'Dragging a header parameter must leave a replacement in the definition');
+  assert.equal(pulled.isDeletable(),true);
+  const customCall=B.serialization.blocks.append({type:'iq_mb_call',extraState:custom.signature},ws);
+  await new Promise(resolve=>w.setTimeout(resolve,30));
+  assert.equal(custom.isDeletable(),false,'A definition in use must be protected from accidental deletion');
+  const changed=w.structuredClone(custom.signature);changed.name='renamed value';w.IQMyBlocks.update(ws,custom,changed);
+  assert.equal(customCall.signature.name,'renamed value');
+  await new Promise(resolve=>w.setTimeout(resolve,30));
+  ws.undo(false);
+  await new Promise(resolve=>w.setTimeout(resolve,30));
+  assert.equal(custom.signature.name,'show a value','Signature edits must support Undo');
+  assert.equal(customCall.signature.name,'show a value','Undo must also restore call blocks');
+  console.log('ok - My Blocks dialog, typed preview, definition/call creation, drag-copy parameters, deletion protection and signature Undo');
   console.log('ok - fullscreen dependency graph with real nodes, vector icons, connections, node inspector and trace worker');
   console.log('ok - starter persistence, drag-only clicks, drag creation, dot categories, Zelos and fullscreen pane restoration');
 }finally{ws.dispose();dom.window.close();}

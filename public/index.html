@@ -72,6 +72,7 @@
     </section>
   </aside>
 </main>
+<dialog id="myBlockDialog" aria-labelledby="myBlockTitle"><form id="myBlockForm"><div class="my-block-heading"><h2 id="myBlockTitle">Make a Block</h2><p>Build a reusable block with named inputs and labels.</p></div><label class="my-block-name">Block name <input id="myBlockName" type="text" maxlength="60" required autocomplete="off" placeholder="draw a square"></label><p class="my-block-preview-label">Block preview</p><div id="myBlockPreview" class="my-block-preview" aria-label="Custom block preview"></div><div class="my-block-add"><button id="myBlockAdd_number" type="button">Add input (number)</button><button id="myBlockAdd_boolean" type="button">Add input (Boolean)</button><button id="myBlockAdd_label" type="button">Add label</button></div><div id="myBlockParts"></div><p class="my-block-hint">Drag inputs from the define block into its body. Your new call block appears in My Blocks. Right-click the definition or a call to edit it.</p><p id="myBlockError" role="alert"></p><div class="my-block-actions"><button id="myBlockCancel" type="button">Cancel</button><button type="submit" class="primary">OK</button></div></form></dialog>
 <dialog id="programTree" aria-labelledby="treeTitle">
   <div class="graph-heading"><div><h2 id="treeTitle">Program tree</h2><span id="treeCount"></span></div><div class="tree-toolbar"><button id="treeRun" type="button" class="primary">▶ Run &amp; trace</button><button id="treeStop" type="button" disabled>■ Stop</button><button id="treeRefresh" type="button">↻ Refresh</button><button id="treeCheck" type="button">Check</button><button id="treeLeft" type="button" aria-label="Brain left">◀</button><button id="treeRight" type="button" aria-label="Brain right">▶</button><button id="treeExport" type="button">Export trace</button><button id="treeClose" type="button" aria-label="Close program tree">✕</button></div></div>
   <div class="graph-statusbar"><span id="treeSummary" role="status"></span><div class="graph-legend"><span style="--dot:#53c9e9">Data</span><span style="--dot:#ab94ff">Operator</span><span style="--dot:#ffbe5c">Control</span><span style="--dot:#66dfa5">Observed</span><span style="--dot:#ee8893">Unreachable</span><span style="--dot:#ff626e">Error</span></div></div>
@@ -101,6 +102,7 @@
 <script src="/iq-catalog.js"></script>
 <script src="/iq-math.js"></script>
 <script src="/iq-vex.js"></script>
+<script src="/my-blocks.js"></script>
 <script src="/editor-ui.js"></script>
 <script src="/console-renderer.js"></script>
 <script src="/transfer-ui.js"></script>
@@ -193,6 +195,7 @@
     code.value = generate() || STARTERS[lang];
     store.set('code.' + lang, code.value);
   }
+  IQMyBlocks.attach(ws);
   IQEditor.restore(ws, store.get('ws', ''));
   store.set('ws', JSON.stringify(Blockly.serialization.workspaces.save(ws)));
   code.value = manual ? store.get('code.' + lang, STARTERS[lang]) : generate() || STARTERS[lang];

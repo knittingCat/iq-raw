@@ -49,7 +49,7 @@
     takeTrace(){const nodes=[...this.traceDirty.values()];this.traceDirty.clear();return nodes;}
     expr(b,x=NaN,depth=0){
       if(b?.disabled||b?.enabled===false)return 0;
-      try{const value=this.evaluate(b,x,depth);const provider=b?.type==='variables_get'?this.providers.get('var:'+variable(b)):b?.type==='iqv_bool_get'?this.providers.get('bool:'+field(b,'NAME')):b?.type==='iqm_complex_get'?this.providers.get('complex:'+field(b,'NAME')):undefined;this.record(b,{value,provider});return value;}
+      try{const value=this.evaluate(b,x,depth);const provider=b?.type==='iq_mb_argument'?this.providers.get('myarg:'+b.extraState?.definitionId+':'+b.extraState?.paramId):b?.type==='variables_get'?this.providers.get('var:'+variable(b)):b?.type==='iqv_bool_get'?this.providers.get('bool:'+field(b,'NAME')):b?.type==='iqm_complex_get'?this.providers.get('complex:'+field(b,'NAME')):undefined;this.record(b,{value,provider});return value;}
       catch(error){if(error instanceof Error){if(!error.blockId)error.blockId=b?.id;this.record(b,{error:error.message});}throw error;}
     }
     evaluate(b,x=NaN,depth=0){
@@ -59,6 +59,7 @@
       if(t==='text')return String(f('TEXT'));
       if(t==='logic_boolean')return f('BOOL')==='TRUE';
       if(t==='logic_null')return null;
+      if(t==='iq_mb_argument'){const a=b.extraState||{};return this.vars.get('myarg:'+a.definitionId+':'+a.paramId)??(a.kind==='boolean'?false:0);}
       if(t==='variables_get')return this.vars.get(variable(b))??0;
       if(t==='text_join')return Array.from({length:Math.min(100,b.extraState?.itemCount??2)},(_,i)=>String(v('ADD'+i,''))).join('');
       if(t==='logic_negate')return !v('BOOL',false);
@@ -180,6 +181,13 @@
       if(t==='iqv_newline'){this.emit({type:'console',text:'\n'});return;}
       if(t==='iqv_clear'||t==='iq_l_console_clear'){this.emit({type:'console-clear'});return;}
       if(t==='iqv_color'){this.emit({type:'console-colour',value:f('COLOR')});return;}
+      if(t==='iq_mb_call'){
+        const s=b.extraState||{},fn=this.functions.get('myblock:'+s.definitionId);if(!fn)throw new PreviewError('My Block definition is missing: '+s.name,b);
+        if((this.myBlockDepth||0)>=100)throw new PreviewError('My Block recursion exceeded 100 calls.',b);
+        const ps=(fn.extraState?.parts||[]).filter(p=>p.kind!=='label'),values=ps.map((p,i)=>p.kind==='boolean'?Boolean(v('ARG'+i,false)):Number(v('ARG'+i))),keys=ps.map(p=>'myarg:'+fn.id+':'+p.id),saved=keys.map(key=>[key,this.vars.has(key),this.vars.get(key),this.providers.get(key)]);
+        keys.forEach((key,i)=>{this.vars.set(key,values[i]);this.providers.set(key,child(b,'ARG'+i)?.id);this.record(child(fn,'PARAM'+i),{value:values[i]});});this.myBlockDepth=(this.myBlockDepth||0)+1;this.record(fn);
+        try{await this.stack(fn.next?.block);}finally{this.myBlockDepth--;for(const[key,existed,value,provider]of saved){existed?this.vars.set(key,value):this.vars.delete(key);provider?this.providers.set(key,provider):this.providers.delete(key);}}return;
+      }
       if(t==='procedures_defnoreturn'){this.functions.set(f('NAME'),b);return;}
       if(t==='procedures_callnoreturn'){
         const name=b.extraState?.name||f('NAME'),fn=this.functions.get(name);if(!fn)throw new PreviewError('Procedure not found: '+name,b);
@@ -200,10 +208,10 @@
     async run(state){
       const blocks=state.blocks?.blocks||[];
       try{this.devices.scan(blocks);}catch(error){this.fail(error);return;}
-      for(const b of blocks){if(b.disabled||b.enabled===false)continue;if(b.type==='procedures_defnoreturn')this.functions.set(field(b,'NAME'),b);if(['iq_ev_brain_pressed','iq_ev_brain_released','iq_ev_brain_timer'].includes(b.type))this.handlers.push(b);}
+      for(const b of blocks){if(b.disabled||b.enabled===false)continue;if(b.type==='iq_mb_define')this.functions.set('myblock:'+b.id,b);if(b.type==='procedures_defnoreturn')this.functions.set(field(b,'NAME'),b);if(['iq_ev_brain_pressed','iq_ev_brain_released','iq_ev_brain_timer'].includes(b.type))this.handlers.push(b);}
       for(const b of this.handlers.filter(b=>b.type==='iq_ev_brain_timer'))this.timers.push(setTimeout(()=>{if(this.active){this.record(b);this.record(b,{branch:'DO'});this.stack(child(b,'DO')).catch(error=>this.fail(error));}},Math.max(0,Number(field(b,'N',1000)))));
       try{
-        for(const b of blocks){if(b.disabled||b.enabled===false||this.handlers.includes(b)||b.type.startsWith('procedures_def'))continue;await this.stack(b);}
+        for(const b of blocks){if(b.disabled||b.enabled===false||this.handlers.includes(b)||(b.type.startsWith('procedures_def')||b.type==='iq_mb_define'))continue;await this.stack(b);}
         this.emit({type:'finished',interactive:this.handlers.length>0});
       }catch(error){if(error===HALT)this.emit({type:'stopped'});else this.fail(error);}
     }

@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';import fs from 'node:fs';import {createRequire}from'node:module';import vm from'node:vm';import{spawnSync}from'node:child_process';
+const require=createRequire(import.meta.url),B=require('blockly');globalThis.Blockly=B;B.Python=require('blockly/python').pythonGenerator;
+for(const file of ['iq-blocks','iq-cpp','iq-catalog','iq-math','iq-vex','my-blocks'])vm.runInThisContext(fs.readFileSync('public/'+file+'.js','utf8'),{filename:file+'.js'});
+const M=globalThis.IQMyBlocks,ws=new B.Workspace(),s={name:'show if ready',parts:[{id:'count',kind:'number',name:'count'},{id:'label',kind:'label',name:'when'},{id:'ready',kind:'boolean',name:'ready'}]};
+const def=M.create(ws,s);assert.equal(def.previousConnection,null);assert.ok(def.nextConnection);assert.equal(def.getInputTargetBlock('PARAM0').type,'iq_mb_argument');
+const gate=ws.newBlock('controls_if'),flag=ws.newBlock('iq_mb_argument');flag.loadExtraState({definitionId:def.id,paramId:'ready',name:'ready',kind:'boolean'});gate.getInput('IF0').connection.connect(flag.outputConnection);def.nextConnection.connect(gate.previousConnection);
+const print=ws.newBlock('iq_print'),argument=ws.newBlock('iq_mb_argument');argument.loadExtraState({definitionId:def.id,paramId:'count',name:'count',kind:'number'});print.getInput('TEXT').connection.connect(argument.outputConnection);gate.getInput('DO0').connection.connect(print.previousConnection);
+const call=ws.newBlock('iq_mb_call');call.loadExtraState(def.signature);const count=ws.newBlock('math_number');count.setFieldValue(7,'NUM');call.getInput('ARG0').connection.connect(count.outputConnection);const ready=ws.newBlock('logic_boolean');ready.setFieldValue('TRUE','BOOL');call.getInput('ARG1').connection.connect(ready.outputConnection);
+const start=ws.newBlock('iq_when_started');start.nextConnection.connect(call.previousConnection);
+assert.deepEqual(call.getInput('ARG0').connection.getCheck(),['Number']);assert.deepEqual(call.getInput('ARG1').connection.getCheck(),['Boolean']);
+const py=B.Python.workspaceToCode(ws),cpp=B.Cpp.workspaceToCode(ws);assert.match(py,/def my_/);assert.match(cpp,/void my_/);assert.match(cpp,/double arg_.*bool arg_/);assert.equal(spawnSync('python3',['-I','-c','import ast,sys;ast.parse(sys.stdin.read())'],{input:py,encoding:'utf8'}).status,0,py);
+const events=[],{Runtime}=require('../public/simulator-core');await new Runtime(e=>events.push(e),{trace:true}).run(B.serialization.workspaces.save(ws));assert.equal(events.filter(e=>e.op==='text').map(e=>e.text).join(''),'7','Definition bodies must run only when called, with their inputs bound');
+const next=structuredClone(def.signature);next.name='show value';next.parts=[next.parts[2],next.parts[1],next.parts[0]];M.update(ws,def,next);assert.equal(call.signature.name,'show value');assert.equal(call.getInputTargetBlock('ARG0'),ready,'Boolean arguments must survive reorder');assert.equal(call.getInputTargetBlock('ARG1'),count,'Number arguments must survive reorder');assert.equal(def.getNextBlock(),gate,'Editing must retain the body');
+const defaultCall=B.serialization.blocks.append(M.flyout(ws).find(b=>b.type==='iq_mb_call'),ws);
+assert.equal(defaultCall.getInputTargetBlock('ARG0').isShadow(),true);
+const renamed=structuredClone(def.signature);renamed.parts[0].name='is ready';M.update(ws,def,renamed);
+assert.equal(defaultCall.getInputTargetBlock('ARG0').isShadow(),true,'Editing must retain default shadow arguments');
+const snapshot=B.serialization.workspaces.save(ws),restored=new B.Workspace();B.serialization.workspaces.load(snapshot,restored);assert.equal(restored.getBlockById(def.id).signature.name,'show value');assert.equal(restored.getBlockById(call.id).getInputTargetBlock('ARG1').getFieldValue('NUM'),7);
+const copied=M.flyout(restored);assert.equal(copied[0].text,'Make a Block');assert.ok(copied.some(b=>b.type==='iq_mb_call'));assert.equal(copied.filter(b=>b.type==='iq_mb_argument').length,2);
+assert.throws(()=>M.create(ws,{name:'show value',parts:[]}),/already uses/);assert.throws(()=>M.update(ws,def,{name:'duplicate inputs',parts:[{id:'a',kind:'number',name:'same'},{id:'b',kind:'boolean',name:'same'}]}),/different name/);
+// Save generated C++ for the normal, isolated build-only API; never download to a brain.
+fs.writeFileSync('/private/tmp/iqraw-my-blocks-test.cpp',B.Cpp.workspaceToCode(restored));
+ws.dispose();restored.dispose();console.log('ok - typed My Blocks, definition hats, argument reporters, calls, Python/C++ generation, offline execution, stable edits/reorder, persistence and validation');
