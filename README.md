@@ -111,7 +111,7 @@ Attach blocks underneath **when started**. Those blocks run once in order when t
 | Logic, Math, Text, Variables | The usual building blocks. |
 | Drivetrain | A setup block (motor ports, wheel size, brain gyro), then drive, drive for a distance, turn, turn for, turn to heading or rotation, velocities, stopping, timeout, and reads for heading, rotation, velocity, current, done and moving. |
 | Looks | Draw pixels, lines, rectangles and circles, set pen and fill colour, pen width and font, next row, clear row, console print and clear, colour sensor light, touch LED brightness and fade. |
-| Sound | Play a note with octave/duration, or any of the 16 built-in sounds, including Siren 2, Ratchet 2, Alarm 2 and Power Down. |
+| Sound | Play a note, one of the 16 VEX sounds, or 12 original IQ Raw effects: Robot Hello, Bubble Pop, Laser Zap, Sparkle, Quest Start, Level Up, Victory Lap, Oops, Low Battery, Countdown, Rain Drops and Digital Doorbell. Original effects use finite note sequences on the IQ2 speaker and matching synthesized preview audio; no audio files need installing. Original sound blocks wait until their sequence ends. |
 | Sensing | Brain (battery, button, cursor, timer), touch LED, colour sensor, distance sensor, gyro, inertial and optical sensor blocks. |
 | My Blocks | Make a named reusable block with number inputs, Boolean inputs and ordered labels. Drag parameter reporters from its define hat into the body, then drag its call block from My Blocks into another stack. Right-click to edit; existing call values follow their input identities through reordering. Saved legacy functions remain available. |
 | Lists (Python) | List blocks. They exist only in Python mode; in C++ mode they leave a comment. |

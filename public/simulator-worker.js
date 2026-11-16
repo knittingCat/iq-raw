@@ -1,4 +1,4 @@
-importScripts('/simulator-devices.js','/simulator-core.js');
+importScripts('/iq-sounds.js','/simulator-devices.js','/simulator-core.js');
 let runtime,draws=[];
 function flush(){if(draws.length){postMessage({type:'draw-batch',commands:draws});draws=[];}}
 function trace(){const nodes=runtime?.takeTrace();if(nodes?.length)postMessage({type:'trace',nodes});}

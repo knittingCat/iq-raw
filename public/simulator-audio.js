@@ -1,5 +1,6 @@
 // Plays the preview's notes and named brain sounds through the computer's speakers (Web Audio). Approximations, not the real recordings.
 (function(root){
+  const originalSounds=typeof module!=='undefined'&&module.exports?require('./iq-sounds'):root.IQRawSounds;
   const frequency=(octave,note)=>440*Math.pow(2,((12*(octave+1)+note)-69)/12);
   // Each named sound is a list of [start s, length s, from Hz, to Hz, wave].
   const SOUNDS={
@@ -21,7 +22,7 @@
     POWER_DOWN:[[0,.8,800,100,'sawtooth']],
   };
   class Audio{
-    constructor(){this.ctx=null;this.next=0;this.muted=false;this.volume=.25;}
+    constructor(){this.nodes=new Set();this.ctx=null;this.next=0;this.muted=false;this.volume=.25;}
     // Browsers only allow sound after a click, so call this from the Run button.
     unlock(){
       try{
@@ -32,13 +33,14 @@
         return true;
       }catch{return false;}
     }
-    reset(){this.next=0;}
+    reset(){this.next=0;for(const node of this.nodes){try{node.stop();}catch{}}this.nodes.clear();}
     tone(start,length,from,to,wave='sine'){
       const ctx=this.ctx;if(!ctx||this.muted)return;
       const osc=ctx.createOscillator(),gain=ctx.createGain(),end=start+length;
       osc.type=wave;osc.frequency.setValueAtTime(from,start);if(to!==from)osc.frequency.linearRampToValueAtTime(to,end);
       gain.gain.setValueAtTime(0,start);gain.gain.linearRampToValueAtTime(this.volume,start+Math.min(.01,length/4));
       gain.gain.setValueAtTime(this.volume,Math.max(start,end-.02));gain.gain.linearRampToValueAtTime(0,end);
+      this.nodes.add(osc);osc.onended=()=>{this.nodes.delete(osc);osc.disconnect();gain.disconnect();};
       osc.connect(gain).connect(ctx.destination);osc.start(start);osc.stop(end+.02);
     }
     // Sounds queue one after another instead of piling on top of each other.
@@ -50,7 +52,7 @@
         this.tone(start,length,frequency(message.octave,message.note),frequency(message.octave,message.note),'triangle');
         this.next=start+length;return;
       }
-      const parts=SOUNDS[message.name]||SOUNDS.TADA;let end=start;
+      const parts=originalSounds.get(message.name)?originalSounds.timeline(message.name):SOUNDS[message.name]||SOUNDS.TADA;let end=start;
       for(const [at,length,from,to,wave] of parts){this.tone(start+at,length,from,to,wave);end=Math.max(end,start+at+length);}
       this.next=end;
     }

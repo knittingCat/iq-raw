@@ -642,6 +642,7 @@ class Brain:
 
     def play_note(self, octave, note, duration=500):
         _sim.playNote(octave, note, duration)
+        _sleep_ms(duration)
 
     def play_sound(self, sound):
         _sim.playSound(sound)

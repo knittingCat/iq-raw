@@ -1,6 +1,7 @@
 // Simulated motors, drivetrain and sound for the offline preview. Shared by the block interpreter and the Python engine.
 // It only keeps state and emits messages ({type:'motor'} and {type:'sound'}); the page draws the motors and plays the audio.
 (function(root){
+  const originalSounds=typeof module!=='undefined'&&module.exports?require('./iq-sounds'):root.IQRawSounds;
   const DEG_PER_SEC_PER_PERCENT=6; // IQ smart motor: 100% is about 100 rpm
   const toPercent=(v,unit)=>{v=Number(v);if(!Number.isFinite(v))return 0;const u=String(unit||'PERCENT').toUpperCase().replace(/^.*\./,'');return u==='RPM'?v:u==='DPS'?v/DEG_PER_SEC_PER_PERCENT:u==='VOLT'||u==='VOLTS'?v/12*100:v;};
   const fromPercent=(p,unit)=>{const u=String(unit||'PERCENT').toUpperCase().replace(/^.*\./,'');return u==='RPM'?p:u==='DPS'?p*DEG_PER_SEC_PER_PERCENT:p;};
@@ -89,6 +90,7 @@
     playNote(octave,note,ms){
       octave=Math.trunc(Number(octave));note=Math.trunc(Number(note));ms=Number(ms);
       if(![octave,note,ms].every(Number.isFinite))return;
+      if(note>=0&&note<=6)note=[0,2,4,5,7,9,11][note];
       this.emit({type:'sound',kind:'note',octave,note,ms:Math.max(0,Math.min(60000,ms)),name:NOTE_NAMES[((note%12)+12)%12]+octave});
     }
     playSound(name){this.emit({type:'sound',kind:'sound',name:String(name).replace(/^.*\./,'').toUpperCase()});}
@@ -139,7 +141,7 @@
         case 'iq_dt_turn_to_heading':{const ms=this.driveTurnToHeading(v('X',90),'DEGREES');if(blocking())await wait(ms);return true;}
         case 'iq_dt_turn_to_rotation':{const ms=this.driveTurnToRotation(v('X',90),'DEGREES');if(blocking())await wait(ms);return true;}
         case 'iq_s_note':this.playNote(v('O',4),v('N',0),v('D',500));return true;
-        case 'iq_s_sound':this.playSound(f('S'));return true;
+        case 'iq_s_sound':this.playSound(f('S'));if(originalSounds.get(f('S')))await rt.sleep(originalSounds.duration(f('S')));return true;
       }
       return undefined;
     }

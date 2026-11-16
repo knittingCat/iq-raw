@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';import fs from 'node:fs';import {createRequire}from'node:module';import vm from'node:vm';import{spawnSync}from'node:child_process';
 const require=createRequire(import.meta.url),B=require('blockly');globalThis.Blockly=B;B.Python=require('blockly/python').pythonGenerator;
-for(const file of ['iq-blocks','iq-cpp','iq-catalog','iq-math','iq-vex','my-blocks'])vm.runInThisContext(fs.readFileSync('public/'+file+'.js','utf8'),{filename:file+'.js'});
+for(const file of ['iq-blocks','iq-cpp','iq-sounds','iq-catalog','iq-math','iq-vex','my-blocks'])vm.runInThisContext(fs.readFileSync('public/'+file+'.js','utf8'),{filename:file+'.js'});
 const M=globalThis.IQMyBlocks,ws=new B.Workspace(),s={name:'show if ready',parts:[{id:'count',kind:'number',name:'count'},{id:'label',kind:'label',name:'when'},{id:'ready',kind:'boolean',name:'ready'}]};
 const def=M.create(ws,s);assert.equal(def.previousConnection,null);assert.ok(def.nextConnection);assert.equal(def.getInputTargetBlock('PARAM0').type,'iq_mb_argument');
 const gate=ws.newBlock('controls_if'),flag=ws.newBlock('iq_mb_argument');flag.loadExtraState({definitionId:def.id,paramId:'ready',name:'ready',kind:'boolean'});gate.getInput('IF0').connection.connect(flag.outputConnection);def.nextConnection.connect(gate.previousConnection);

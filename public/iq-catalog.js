@@ -2,6 +2,7 @@
 // both generators are built from it. The Python forms follow the block docs in VEX's VS Code extension; the C++ forms are
 // checked by compiling every block (see test/blocks.test.mjs). Needs Blockly, iq-blocks.js and iq-cpp.js loaded first.
 (function () {
+  const originalSounds=typeof module!=='undefined'&&module.exports?require('./iq-sounds'):globalThis.IQRawSounds;
   const py = Blockly.Python;
   const cp = Blockly.Cpp;
   const PORTS = Array.from({ length: 12 }, (_, i) => [String(i + 1), String(i + 1)]);
@@ -28,7 +29,7 @@
   const WAIT = [['and wait', 'True'], ["don't wait", 'False']];
   const COLORS = ['RED', 'GREEN', 'BLUE', 'YELLOW', 'ORANGE', 'PURPLE', 'CYAN', 'WHITE', 'BLACK', 'TRANSPARENT', 'RED_VIOLET', 'VIOLET', 'BLUE_VIOLET', 'BLUE_GREEN', 'YELLOW_GREEN', 'YELLOW_ORANGE', 'RED_ORANGE'].map((c) => 'Color.' + c);
   const FONTS = ['MONO12', 'MONO15', 'MONO20', 'MONO30', 'MONO40', 'MONO60', 'PROP20', 'PROP30', 'PROP40'].map((f) => 'FontType.' + f);
-  const SOUNDS = ['SIREN', 'WRONG_WAY', 'WRONG_WAY_SLOW', 'FILLUP', 'HEADLIGHTS_ON', 'HEADLIGHTS_OFF', 'TOLLBOOTH', 'ALARM', 'TADA', 'DOOR_CLOSE', 'RATCHET', 'WRENCH', 'SIREN2', 'RATCHET2', 'ALARM2', 'POWER_DOWN'].map((s) => 'SoundType.' + s);
+  const SOUNDS = ['SIREN', 'WRONG_WAY', 'WRONG_WAY_SLOW', 'FILLUP', 'HEADLIGHTS_ON', 'HEADLIGHTS_OFF', 'TOLLBOOTH', 'ALARM', 'TADA', 'DOOR_CLOSE', 'RATCHET', 'WRENCH', 'SIREN2', 'RATCHET2', 'ALARM2', 'POWER_DOWN'].map((s) => 'SoundType.' + s).concat(Object.keys(originalSounds.recipes).map(s=>'IQRawSound.'+s));
   const AXES = ['AxisType.XAXIS', 'AxisType.YAXIS', 'AxisType.ZAXIS'];
   const ORIENT = ['OrientationType.PITCH', 'OrientationType.ROLL', 'OrientationType.YAW'];
   const GYROCAL = ['GyroCalibrationType.NORMAL', 'GyroCalibrationType.SLOW', 'GyroCalibrationType.EXTENDED'];
@@ -50,7 +51,7 @@
     const m = v.match(/^[A-Za-z]+\.(.+)$/);
     return (m ? m[1] : v).toLowerCase();
   }
-  const labelOf = (v) => String(v).replace(/^[A-Za-z]+\./, '').replace(/_/g, ' ').toLowerCase();
+  const labelOf = (v) => String(v).startsWith('IQRawSound.')?'IQ Raw · '+originalSounds.get(v).label:String(v).replace(/^[A-Za-z]+\./, '').replace(/_/g, ' ').toLowerCase();
 
   // ---- the table ----
   // kind: s statement, n number, b true/false, x any, h hat (a stack that runs when something happens)
@@ -307,6 +308,7 @@
     if (s.textArg && !isPy) { const t = b.getInputTargetBlock(s.textArg); if (t && !isText(b, s.textArg)) tpl = s.cppNum; }
     if (isPy) pyBase(g);
     const dev = s.dev ? resolve(lang, g, s, b) : '';
+    if(s.id==='iq_s_sound'&&originalSounds.get(b.getFieldValue('S')))return originalSounds.generate(lang,b.getFieldValue('S'),dev,g);
     if (s.kind === 'h') {
       const idx = b.workspace.getBlocksByType(s.id, true).indexOf(b) + 1;
       const fn = `${s.id.replace(/^iq_/, '')}_${idx}`;

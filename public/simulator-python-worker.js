@@ -1,5 +1,6 @@
 // Module worker (Pyodide no longer loads in classic workers). The helper scripts are plain scripts that attach to `self`.
 import {loadPyodide} from '/vendor/pyodide/pyodide.mjs';
+import '/iq-sounds.js';
 import '/simulator-devices.js';
 import '/simulator-python.js';
 self.onmessage=async({data})=>{
